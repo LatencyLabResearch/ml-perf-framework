@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+*.log
+
+# Environment variables
+.env
+
+# Logs
+system-a/logging/raw/*.csv
+
+# Optional
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
