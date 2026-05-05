@@ -5,7 +5,8 @@ function fib(n) {
 }
 
 router.post('/', (req, res) => {
-    const n = Math.min(parseInt(req.body?.n, 10) || 36, 40);
+    const parsedN = parseInt(req.body?.n, 10);
+    const n = Math.max(0, Math.min(Number.isNaN(parsedN) ? 36 : parsedN, 40));
     res.json({ type: 'heavy', result: fib(n) });
 });
 
