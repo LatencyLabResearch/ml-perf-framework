@@ -21,10 +21,10 @@ router.post('/', (req, res) => {
 
     const result = getRequestCount();
 
-    res.json({ type: 'moderate', rows: result.rows, });
+    res.json({ type: 'moderate', count: result.cnt, });
   } catch (error) {
     console.error(error);
-
+    
     res.status(500).json({
       error: 'Database error',
     });
