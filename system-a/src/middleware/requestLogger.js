@@ -14,7 +14,7 @@
 
 
 
-const { csvLogger, debugLogger } = require('../config/logger');
+const { csvLogger, debugLogger } = require('../server/config/logger');
 
 const config = require('../server/config');
 

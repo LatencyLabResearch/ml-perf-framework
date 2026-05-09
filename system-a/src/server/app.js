@@ -4,7 +4,7 @@ const express = require('express');
 const lightweightRoutes = require('../routes/lightweight');
 const moderateRoutes = require('../routes/moderate');
 const heavyRoutes = require('../routes/heavy');
-const userRoutes = require('../routes/userRoutes');
+
 
 // Import Middlewares
 const requestLogger = require('../middleware/requestLogger');
@@ -23,7 +23,7 @@ app.use(metricsCollector);
 app.use(requestLogger);
 
 // Routes
-app.use('/api/users', userRoutes);
+
 app.use('/api/light', lightweightRoutes);
 app.use('/api/moderate', moderateRoutes);
 app.use('/api/heavy', heavyRoutes);
