@@ -1,13 +1,19 @@
 
 # Dependencies
 node_modules/
-*.log
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
 
 # Environment variables
 .env
 
 # Logs
 system-a/logging/raw/*.csv
+*.log
 
 # Optional
 .DS_Store
