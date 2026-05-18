@@ -29,7 +29,7 @@ const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
 
-const config = require('../config');
+const config = require('../server/config');
 
 fs.mkdirSync(config.logDir, { recursive: true });
 
