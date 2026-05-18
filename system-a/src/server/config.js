@@ -1,8 +1,15 @@
 require('dotenv').config();
 
 module.exports = {
-    port: parseInt(process.env.PORT) || 3000,
-    instanceId: parseInt(process.env.INSTANCE_ID) || 1,
+    instances: [
+        { id: 'instance-1', url: 'http://localhost:3001' },
+        { id: 'instance-2', url: 'http://localhost:3002' },
+        { id: 'instance-3', url: 'http://localhost:3003' }
+    ],
+
+    lbPort: parseInt(process.env.LB_PORT) || 3000,
+    port: parseInt(process.env.PORT) || 3001,
+    instanceId: process.env.INSTANCE_ID || 'instance-1',
     numInstances: parseInt(process.env.NUM_INSTANCES) || 3,
     logDir: process.env.LOG_DIR || './logging/raw',
     env: process.env.NODE_ENV || 'development',
