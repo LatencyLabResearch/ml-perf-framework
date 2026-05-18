@@ -6,11 +6,11 @@ let index = 0;
 
 function next() {
 
-    if (!instances || instances.length === 0) {
+    if (!instances.length) {
         throw new Error('No instances available');
     }
 
-    const instance = instances[index % instances.length];
+    const instance = instances[index];
 
     index = (index + 1) % instances.length;
 
