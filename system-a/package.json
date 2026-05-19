@@ -4,9 +4,11 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server/index.js",
+    "lb": "cross-env LB_PORT=3000 node src/loadbalancer/lb.js",
+    "instance1": "cross-env PORT=3001 INSTANCE_ID=1 node src/server/index.js",
+    "instance2": "cross-env PORT=3002 INSTANCE_ID=2 node src/server/index.js",
+    "instance3": "cross-env PORT=3003 INSTANCE_ID=3 node src/server/index.js",
     "dev": "nodemon src/server/index.js",
-    "instance2": "cross-env PORT=3001 INSTANCE_ID=2 node src/server/index.js",
-    "instance3": "cross-env PORT=3002 INSTANCE_ID=3 node src/server/index.js",
     "test": "jest"
   },
   "dependencies": {
@@ -15,6 +17,7 @@
     "cross-env": "^10.1.0",
     "dotenv": "^16.4.0",
     "express": "^4.19.2",
+    "http-proxy": "^1.18.1",
     "pidusage": "^3.0.0",
     "winston": "^3.13.0"
   },

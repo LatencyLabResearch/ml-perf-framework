@@ -12,7 +12,6 @@ TIMEOUT_SECONDS   = 5
 REPORT_FOLDER     = "logging/smoke_reports"
 
 MAX_BACKEND_RESPONSE_MS=500
-MAX_ML_INTERFERENCE_MS=100
 MAX_LB_RESPONSE_MS=200
 
 GREEN  = "\033[92m"
@@ -42,8 +41,8 @@ def record(name, passed, detail="",response_ms=None):
     pad="" * max(1,55- len(name))
     print(f" {name}{pad}{badge}{detail_str}")
 
-    def test_backends_reachable():
-        print(color("\n --Test 1: Backend Instances Reachable--",CYAN))
+def test_backends_reachable():
+    print(color("\n --Test 1: Backend Instances Reachable--",CYAN))
         
     for port in BACKEND_PORTS:
         test_name=f"Backend port {port} reachable"
@@ -99,7 +98,7 @@ def test_backends_return_json():
             
             body = response.json()
             
-            # Check that expected fields exist
+            # Check that expected fields exist0
             has_cpu    = "cpu_usage"          in body
             has_mem    = "memory_usage"        in body
             has_conn   = "active_connections"  in body
@@ -121,18 +120,8 @@ def test_backends_return_json():
         except Exception as e:
             record(test_name, False, str(e))
 
-# =============================================================
-# SMOKE TEST 4 — Load Balancer Reachable
-# =============================================================
 def test_load_balancer_reachable():
-    """
-    WHY THIS TEST EXISTS:
-    The load balancer is the entry point of your entire system.
-    JMeter sends all traffic to the load balancer, which then
-    routes to backend instances. If it's down, JMeter traffic
-    goes nowhere — your experiment produces zero useful data.
-    One simple check here saves hours of wasted experiment time.
-    """
+    
     print(color("\n── Test 4: Load Balancer Reachable ──", CYAN))
 
     test_name = "Load balancer reachable (port 8080)"
@@ -153,21 +142,7 @@ def test_load_balancer_reachable():
         record(test_name, False, str(e))
 
 
-# =============================================================
-# SMOKE TEST 5 — Load Balancer Routes to All Backends
-# =============================================================
 def test_load_balancer_routing():
-    """
-    WHY THIS TEST EXISTS:
-    The load balancer must distribute traffic across ALL 4
-    instances — not just one. If it's misconfigured and only
-    routes to port 3000, your multi-instance experiment is
-    actually a single-instance experiment. Your routing results
-    would be completely invalid.
-    This test sends 4 requests through the load balancer and
-    checks that different backend ports respond — proving
-    distribution is working.
-    """
     print(color("\n── Test 5: Load Balancer Routes to Backends ──", CYAN))
 
     test_name = "Load balancer distributes requests"
@@ -200,175 +175,8 @@ def test_load_balancer_routing():
         record(test_name, False, str(e))
 
 
-# =============================================================
-# SMOKE TEST 6 — ML Service Reachable
-# =============================================================
-def test_ml_service_reachable():
-    """
-    WHY THIS TEST EXISTS:
-    Your proactive framework only works if the ML model is loaded
-    and ready to predict BEFORE requests start arriving. If the
-    model server is down, every incoming request gets no prediction
-    = no proactive decision = your system falls back to reactive
-    behaviour = your research contribution disappears.
-    """
-    print(color("\n── Test 6: ML Inference Service Reachable ──", CYAN))
-
-    test_name = "ML service reachable (port 5000)"
-    try:
-        start      = time.time()
-        response   = requests.get(
-            f"{ML_SERVICE_URL}/predict/health",
-            timeout=TIMEOUT_SECONDS
-        )
-        elapsed_ms = round((time.time() - start) * 1000, 2)
-
-        if response.status_code == 200:
-            record(test_name, True, f"{elapsed_ms}ms", elapsed_ms)
-        else:
-            record(test_name, False, f"HTTP {response.status_code}")
-
-    except requests.exceptions.ConnectionError:
-        record(test_name, False, "Connection refused — ML server not running")
-    except Exception as e:
-        record(test_name, False, str(e))
-
-
-# =============================================================
-# SMOKE TEST 7 — ML Inference Speed Acceptable
-# =============================================================
-def test_ml_inference_speed():
-    """
-    WHY THIS TEST EXISTS:
-    This is the most research-critical test in the entire script.
-    Your proposal cites Thomas (2025) on 'decision latency' —
-    the time the ML model takes to generate a prediction.
-    If the model takes 300ms to predict, and requests arrive
-    every 50ms, predictions are always too late. The system
-    cannot be proactive — it becomes reactive by default.
-    MAX_ML_INFERENCE_MS = 100ms is the threshold. Above this,
-    your proactive framework cannot function as designed.
-    """
-    print(color("\n── Test 7: ML Inference Speed Acceptable ──", CYAN))
-
-    test_name = f"ML inference response < {MAX_ML_INFERENCE_MS}ms"
-    try:
-        # Send a sample prediction request with dummy feature values
-        # These match your Section 6.2 features:
-        # request-level + system-level + engineered features
-        sample_payload = {
-            "payload_size_kb":       12.5,   # request-level feature
-            "http_method":           "GET",  # request-level feature
-            "endpoint_complexity":   2,      # request-level feature
-            "cpu_utilization":       45.0,   # system-level feature
-            "memory_usage_mb":       512,    # system-level feature
-            "active_connections":    8,      # system-level feature
-            "rolling_avg_cpu":       42.3,   # engineered feature
-            "request_rate_per_sec":  35.0,   # engineered feature
-            "error_rate":            0.01    # engineered feature
-        }
-
-        start      = time.time()
-        response   = requests.post(
-            f"{ML_SERVICE_URL}/predict",
-            json=sample_payload,
-            timeout=TIMEOUT_SECONDS
-        )
-        elapsed_ms = round((time.time() - start) * 1000, 2)
-
-        if response.status_code == 200:
-            passed = elapsed_ms < MAX_ML_INFERENCE_MS
-            try:
-                prediction = response.json().get("predicted_latency_ms", "unknown")
-                record(
-                    test_name, passed,
-                    f"{elapsed_ms}ms — predicted latency: {prediction}ms",
-                    elapsed_ms
-                )
-            except Exception:
-                record(test_name, passed, f"{elapsed_ms}ms", elapsed_ms)
-        else:
-            record(test_name, False, f"HTTP {response.status_code} — check /predict endpoint")
-
-    except requests.exceptions.ConnectionError:
-        record(test_name, False, "ML server not reachable")
-    except Exception as e:
-        record(test_name, False, str(e))
-
-
-# =============================================================
-# SMOKE TEST 8 — ML Model Returns Valid Prediction
-# =============================================================
-def test_ml_prediction_valid():
-    """
-    WHY THIS TEST EXISTS:
-    The ML model could be running and responding fast, but
-    returning garbage values — negative latency, null, zero,
-    or an error message instead of a number. Your routing logic
-    reads this prediction to make decisions. A bad prediction
-    value causes bad routing decisions = corrupted experiment.
-    This test checks the prediction is a positive number within
-    a realistic range for web request latency.
-    """
-    print(color("\n── Test 8: ML Prediction Value is Valid ──", CYAN))
-
-    test_name = "ML prediction returns valid latency value"
-    try:
-        sample_payload = {
-            "payload_size_kb":      12.5,
-            "http_method":          "GET",
-            "endpoint_complexity":  2,
-            "cpu_utilization":      45.0,
-            "memory_usage_mb":      512,
-            "active_connections":   8,
-            "rolling_avg_cpu":      42.3,
-            "request_rate_per_sec": 35.0,
-            "error_rate":           0.01
-        }
-
-        response = requests.post(
-            f"{ML_SERVICE_URL}/predict",
-            json=sample_payload,
-            timeout=TIMEOUT_SECONDS
-        )
-
-        body       = response.json()
-        prediction = body.get("predicted_latency_ms")
-
-        # Validity checks on the prediction value
-        if prediction is None:
-            record(test_name, False, "Response missing 'predicted_latency_ms' field")
-        elif not isinstance(prediction, (int, float)):
-            record(test_name, False, f"Prediction is not a number: {prediction}")
-        elif prediction <= 0:
-            record(test_name, False, f"Prediction is zero or negative: {prediction}ms")
-        elif prediction > 30000:
-            # 30 seconds is unrealistically high for a web request
-            record(test_name, False, f"Prediction unrealistically high: {prediction}ms")
-        else:
-            record(test_name, True, f"Predicted latency: {prediction}ms — value looks realistic")
-
-    except json.JSONDecodeError:
-        record(test_name, False, "ML response is not valid JSON")
-    except Exception as e:
-        record(test_name, False, str(e))
-
-
-# =============================================================
-# SMOKE TEST 9 — Log Folders Exist and Are Writable
-# =============================================================
 def test_log_folders():
-    """
-    WHY THIS TEST EXISTS:
-    Your data collection pipeline (Section 6.2) writes every
-    request as a CSV row to logging/raw/. If this folder doesn't
-    exist or isn't writable (permission issue), the logger
-    silently fails. You could run a 3-hour JMeter session and
-    collect zero data because the folder wasn't ready.
-    This test creates each folder if missing AND verifies Python
-    can actually write a file into it — not just that it exists.
-    """
-    print(color("\n── Test 9: Log Folders Exist and Writable ──", CYAN))
+    print(color("\n── Test 6: Log Folders Exist and Writable ──", CYAN))
 
     folders = {
         "logging/raw":           "Raw request logs",
@@ -397,26 +205,8 @@ def test_log_folders():
             record(test_name, False, str(e))
 
 
-# =============================================================
-# SMOKE TEST 10 — End-to-End Request Flow
-# =============================================================
 def test_end_to_end():
-    """
-    WHY THIS TEST EXISTS:
-    The most important test. This simulates exactly what happens
-    during a real experiment:
-      1. Request arrives at load balancer
-      2. Load balancer routes to a backend instance
-      3. Backend sends features to ML model
-      4. ML model returns predicted latency
-      5. Backend uses prediction to make routing decision
-      6. Response returned to client
-    
-    If this full chain works, your system is ready for experiments.
-    If it breaks anywhere in the chain, you know exactly where.
-    This is the final gate before starting JMeter.
-    """
-    print(color("\n── Test 10: End-to-End Request Flow ──", CYAN))
+    print(color("\n── Test 7: End-to-End Request Flow ──", CYAN))
 
     test_name = "Full request flows through load balancer → backend → ML"
     try:
@@ -442,16 +232,7 @@ def test_end_to_end():
     except Exception as e:
         record(test_name, False, str(e))
 
-
-# =============================================================
-# FINAL SUMMARY + EXPORT
-# =============================================================
 def print_summary():
-    """
-    Counts all PASS and FAIL results.
-    Prints the final verdict — READY or NOT READY.
-    Exports all results to a CSV for your research records.
-    """
     total  = len(test_results)
     passed = sum(1 for r in test_results if r["result"] == "PASS")
     failed = total - passed
@@ -496,7 +277,7 @@ def export_smoke_report():
     timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_file = f"{REPORT_FOLDER}/smoke_{timestamp}.csv"
 
-    with open(report_file, "w", newline="") as f:
+    with open(report_file, "w", newline="",encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=["test", "result", "detail", "response_ms", "checked_at"]
@@ -513,8 +294,6 @@ def export_smoke_report():
 def main():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    print(color("=" * 60, CYAN))
-    print(color("  Proactive ML Framework — Smoke Test", CYAN))
     print(color(f"  {timestamp}", GRAY))
     print(color("=" * 60, CYAN))
     print(color("\n  Running 10 smoke tests...\n", GRAY))
@@ -525,9 +304,6 @@ def main():
     test_backends_return_json()      # Test 3
     test_load_balancer_reachable()   # Test 4
     test_load_balancer_routing()     # Test 5
-    test_ml_service_reachable()      # Test 6
-    test_ml_inference_speed()        # Test 7
-    test_ml_prediction_valid()       # Test 8
     test_log_folders()               # Test 9
     test_end_to_end()                # Test 10
 

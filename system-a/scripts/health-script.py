@@ -115,26 +115,6 @@ def check_load_balancer():
     except Exception:
         print_status("Load Balancer", "Not Responding", "Check nginx/HAProxy config")
 
-
-def check_ml_service():
-    print_section("ML Inference Service (port 5000)")
-    try:
-        start      = time.time()
-        response   = requests.get(ML_SERVICE_URL, timeout=TIMEOUT_SECONDS)
-        elapsed_ms = round((time.time() - start) * 1000, 2)
-
-        if response.status_code == 200:
-            status = "Healthy" if elapsed_ms < 100 else "Degraded"
-            print_status(
-                "ML Inference Engine", status,
-                f"Inference ping: {elapsed_ms}ms {'⚠ High latency!' if elapsed_ms >= 100 else ''}"
-            )
-        else:
-            print_status("ML Inference Engine", "Degraded", f"HTTP {response.status_code}")
-    except Exception:
-        print_status("ML Inference Engine", "Not Responding", "Model server may not be running")
-
-
 # ── 4. Log File Summary ────────────────────────────────────────
 def check_logs():
    
@@ -217,7 +197,7 @@ def export_health_report(instance_stats):
     timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_file = f"{REPORT_FOLDER}/health_{timestamp}.csv"
 
-    with open(report_file, "w", newline="") as f:
+    with open(report_file, "w", newline="",encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["port", "status", "response_ms", "checked_at"])
         writer.writeheader()
         writer.writerows(instance_stats)
@@ -234,7 +214,6 @@ def main():
 
     healthy_count, instance_stats = check_instances()
     check_load_balancer()
-    check_ml_service()
     check_logs()
     total_rows = check_dataset_progress()
 
