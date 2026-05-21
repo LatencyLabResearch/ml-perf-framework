@@ -5,9 +5,8 @@ import csv
 import os
 from datetime import datetime
 
-BACKEND_PORTS     = [3000, 3001, 3002, 3003]
-LOAD_BALANCER_URL = "http://localhost:8080"
-ML_SERVICE_URL    = "http://localhost:5000"
+BACKEND_PORTS     = [3001, 3002, 3003]
+LOAD_BALANCER_URL = "http://localhost:3000"
 TIMEOUT_SECONDS   = 5
 REPORT_FOLDER     = "logging/smoke_reports"
 
@@ -98,21 +97,26 @@ def test_backends_return_json():
             
             body = response.json()
             
-            # Check that expected fields exist0
-            has_cpu    = "cpu_usage"          in body
-            has_mem    = "memory_usage"        in body
-            has_conn   = "active_connections"  in body
+            # Check fields that the Node.js /health endpoint actually returns
+            has_status   = "status"   in body
+            has_instance = "instance" in body
 
-            if has_cpu and has_mem and has_conn:
-                record(
-                    test_name, True,
-                    f"cpu={body['cpu_usage']}% mem={body['memory_usage']}MB conn={body['active_connections']}"
-                )
+            if has_status and has_instance:
+                # Also verify status value is "ok"
+                if body["status"] == "ok":
+                    record(
+                        test_name, True,
+                        f"status={body['status']}  instance={body['instance']}"
+                    )
+                else:
+                    record(
+                        test_name, False,
+                        f"Unexpected status value: '{body['status']}' (expected 'ok')"
+                    )
             else:
                 missing = []
-                if not has_cpu:  missing.append("cpu_usage")
-                if not has_mem:  missing.append("memory_usage")
-                if not has_conn: missing.append("active_connections")
+                if not has_status:   missing.append("status")
+                if not has_instance: missing.append("instance")
                 record(test_name, False, f"Missing fields: {', '.join(missing)}")
 
         except json.JSONDecodeError:
@@ -124,7 +128,7 @@ def test_load_balancer_reachable():
     
     print(color("\n── Test 4: Load Balancer Reachable ──", CYAN))
 
-    test_name = "Load balancer reachable (port 8080)"
+    test_name = "Load balancer reachable (port 3000)"
     try:
         start      = time.time()
         response   = requests.get(

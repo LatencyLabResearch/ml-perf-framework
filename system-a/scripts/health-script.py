@@ -5,9 +5,8 @@ import glob
 import time
 from datetime import datetime
 
-BACKEND_PORTS     = [3000, 3001, 3002, 3003]  # want to consider our backend ports #
-LOAD_BALANCER_URL = "http://localhost:8080/health" # want to check ur load balancer url
-ML_SERVICE_URL    = "http://localhost:5000/predict/health" # ml model server's health end point 
+BACKEND_PORTS     = [3001, 3002, 3003]  # want to consider our backend ports #
+LOAD_BALANCER_URL = "http://localhost:3000/health" # want to check ur load balancer url
 LOG_FOLDER        = "logging/raw"
 METRICS_FOLDER    = "logging/metrics"
 REPORT_FOLDER     = "logging/health_reports"
