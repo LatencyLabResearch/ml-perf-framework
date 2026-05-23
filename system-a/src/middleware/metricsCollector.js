@@ -71,32 +71,6 @@ module.exports = (req, res, next) => {
 
     const payloadSize = req.headers['content-length'] ? +(req.headers['content-length'] / 1024).toFixed(2) : 0;
 
-    /* ---------- RESPONSE FINISH ---------- */
-
-    res.on('finish', () => {
-
-        const now = Date.now();
-
-        const latency =
-            Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
-
-        latencyWindow.push({
-            ts: now,
-            value: latency
-        });
-
-        pruneOld(latencyWindow);
-
-        if (res.statusCode >= 500) {
-
-            errorWindow.push({
-                ts: now
-            });
-
-            pruneOld(errorWindow);
-        }
-    });
-
     /* ---------- COMPUTE WINDOW METRICS ---------- */
 
     const avgLatency =
@@ -148,9 +122,34 @@ module.exports = (req, res, next) => {
         status_code:             0
     };
 
+    /* ---------- RESPONSE FINISH ---------- */
+
     res.on('finish', () => {
-        const ms = Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
-        req._metrics.response_time_ms = +ms.toFixed(2);
+
+        const now = Date.now();
+
+        const latency =
+            Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
+
+        latencyWindow.push({
+            ts: now,
+            value: latency
+        });
+
+        pruneOld(latencyWindow);
+
+        if (res.statusCode >= 500) {
+
+            errorWindow.push({
+                ts: now
+            });
+
+            pruneOld(errorWindow);
+        }
+
+        /* ---------- UPDATE RESPONSE METRICS ---------- */
+
+        req._metrics.response_time_ms = +latency.toFixed(2);
         req._metrics.status_code = res.statusCode;
     });
 
