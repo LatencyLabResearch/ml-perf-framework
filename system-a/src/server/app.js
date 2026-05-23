@@ -29,12 +29,11 @@ app.use('/api/moderate', moderateRoutes);
 app.use('/api/heavy', heavyRoutes);
 
 app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        instance: require('./config').instanceId 
+    res.json({
+        status: 'ok',
+        instance: require('./config').instanceId
     });
 });
-
 
 app.use((req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });

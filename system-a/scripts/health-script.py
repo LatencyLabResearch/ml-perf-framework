@@ -5,8 +5,8 @@ import glob
 import time
 from datetime import datetime
 
-BACKEND_PORTS     = [3001, 3002, 3003]  # want to consider our backend ports #
-LOAD_BALANCER_URL = "http://localhost:3000/health" # want to check ur load balancer url
+BACKEND_PORTS     = [3001, 3002, 3003]
+LOAD_BALANCER_URL = "http://localhost:3000/health"
 LOG_FOLDER        = "logging/raw"
 METRICS_FOLDER    = "logging/metrics"
 REPORT_FOLDER     = "logging/health_reports"
@@ -31,20 +31,23 @@ def print_header(title):
     print(f"{color(f'  {title}', CYAN)}")
     print(f"{color(line, CYAN)}")
 
+
 def print_section(title):
     print(f"\n{color(f'── {title} ──', YELLOW)}")
 
 def print_status(label, status, detail=""):
     padding = " " * max(1, 30 - len(label))
     status_color = {
-        "Healthy":       GREEN,
-        "Degraded":      YELLOW,
-        "Not Responding":RED,
-        "Error":         RED,
+        "Healthy":        GREEN,
+        "Degraded":       YELLOW,
+        "Not Responding": RED,
+        "Error":          RED,
     }.get(status, RESET)
     detail_str = f"  {color(detail, GRAY)}" if detail else ""
     print(f"  {label}{padding}{color(f'[{status}]', status_color)}{detail_str}")
 
+
+# ── FIXED: now reads { status, instance } from your Node.js /health ──
 def check_instances():
     print_section("Backend Instance Status")
 
@@ -62,61 +65,106 @@ def check_instances():
             elapsed_ms = round((time.time() - start) * 1000, 2)
 
             if response.status_code == 200:
-                healthy_count += 1
-                detail = f"Response: {elapsed_ms}ms"
-
                 try:
                     body = response.json()
-                    if "cpu_usage"          in body: detail += f"  CPU: {body['cpu_usage']}%"
-                    if "memory_usage"       in body: detail += f"  MEM: {body['memory_usage']}MB"
-                    if "active_connections" in body: detail += f"  Conn: {body['active_connections']}"
-                except Exception:
-                    pass
 
-                print_status(label, "Healthy", detail)
-                instance_stats.append({
-                    "port": port, "status": "Healthy",
-                    "response_ms": elapsed_ms, "checked_at": datetime.now()
-                })
+                    # ✅ Match what Node.js actually returns: { status, instance }
+                    has_status   = "status"   in body
+                    has_instance = "instance" in body
+
+                    if has_status and has_instance and body["status"] == "ok":
+                        healthy_count += 1
+                        detail = (
+                            f"Response: {elapsed_ms}ms  "
+                            f"status={body['status']}  "
+                            f"instance={body['instance']}"
+                        )
+                        print_status(label, "Healthy", detail)
+                        instance_stats.append({
+                            "port":       port,
+                            "status":     "Healthy",
+                            "instance":   body["instance"],   # ✅ store instance ID
+                            "response_ms": elapsed_ms,
+                            "checked_at": datetime.now()
+                        })
+
+                    else:
+                        # Response came back but fields are wrong or status != "ok"
+                        missing = []
+                        if not has_status:   missing.append("status")
+                        if not has_instance: missing.append("instance")
+                        detail = (
+                            f"Unexpected response: {body}"
+                            if not missing
+                            else f"Missing fields: {', '.join(missing)}"
+                        )
+                        print_status(label, "Degraded", detail)
+                        instance_stats.append({
+                            "port":        port,
+                            "status":      "Degraded",
+                            "instance":    body.get("instance", "unknown"),
+                            "response_ms": elapsed_ms,
+                            "checked_at":  datetime.now()
+                        })
+
+                except Exception:
+                    # HTTP 200 but body is not valid JSON
+                    print_status(label, "Degraded", "Response is not valid JSON")
+                    instance_stats.append({
+                        "port":        port,
+                        "status":      "Degraded",
+                        "instance":    "unknown",
+                        "response_ms": elapsed_ms,
+                        "checked_at":  datetime.now()
+                    })
 
             else:
                 print_status(label, "Degraded", f"HTTP {response.status_code}")
                 instance_stats.append({
-                    "port": port, "status": "Degraded",
-                    "response_ms": elapsed_ms, "checked_at": datetime.now()
+                    "port":        port,
+                    "status":      "Degraded",
+                    "instance":    "unknown",
+                    "response_ms": elapsed_ms,
+                    "checked_at":  datetime.now()
                 })
 
         except requests.exceptions.ConnectionError:
             print_status(label, "Not Responding", "Connection refused — instance may be offline")
             instance_stats.append({
-                "port": port, "status": "Not Responding",
-                "response_ms": -1, "checked_at": datetime.now()
+                "port":        port,
+                "status":      "Not Responding",
+                "instance":    "unknown",
+                "response_ms": -1,
+                "checked_at":  datetime.now()
             })
         except requests.exceptions.Timeout:
             print_status(label, "Not Responding", f"Timed out after {TIMEOUT_SECONDS}s")
             instance_stats.append({
-                "port": port, "status": "Not Responding",
-                "response_ms": -1, "checked_at": datetime.now()
+                "port":        port,
+                "status":      "Not Responding",
+                "instance":    "unknown",
+                "response_ms": -1,
+                "checked_at":  datetime.now()
             })
 
     return healthy_count, instance_stats
 
 
 def check_load_balancer():
-   
-    print_section("Load Balancer Check (port 8080)")
+    print_section("Load Balancer Check (port 3000)")  
     try:
         response = requests.get(LOAD_BALANCER_URL, timeout=TIMEOUT_SECONDS)
         if response.status_code == 200:
-            print_status("Load Balancer", "Healthy", "HTTP 200")
+            body = response.json()
+            detail = f"HTTP 200  status={body.get('status','?')}  instance={body.get('instance','?')}"
+            print_status("Load Balancer", "Healthy", detail)
         else:
             print_status("Load Balancer", "Degraded", f"HTTP {response.status_code}")
     except Exception:
         print_status("Load Balancer", "Not Responding", "Check nginx/HAProxy config")
 
-# ── 4. Log File Summary ────────────────────────────────────────
+
 def check_logs():
-   
     print_section("Log File Summary")
 
     if os.path.exists(LOG_FOLDER):
@@ -127,16 +175,14 @@ def check_logs():
         if csv_files:
             print(f"  {color(f'Raw request logs found: {len(csv_files)} file(s)', GREEN)}")
             for f in csv_files[:5]:
-                size_kb   = round(os.path.getsize(f) / 1024, 1)
-                mod_time  = datetime.fromtimestamp(os.path.getmtime(f)).strftime("%Y-%m-%d %H:%M:%S")
+                size_kb  = round(os.path.getsize(f) / 1024, 1)
+                mod_time = datetime.fromtimestamp(os.path.getmtime(f)).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"  {color(f'  {os.path.basename(f)}  |  {mod_time}  |  {size_kb} KB', GRAY)}")
             if len(csv_files) > 5:
                 print(f"  {color(f'  ... and {len(csv_files) - 5} more file(s)', GRAY)}")
-
-            # Row count for latest file
             try:
                 with open(csv_files[0], "r") as f:
-                    row_count = sum(1 for _ in f) - 1  # subtract header
+                    row_count = sum(1 for _ in f) - 1
                 print(f"  {color(f'Latest file row count: {row_count} request records', CYAN)}")
             except Exception:
                 pass
@@ -152,9 +198,7 @@ def check_logs():
         print(f"  {color(f'Metrics folder \'{METRICS_FOLDER}\' not found.', YELLOW)}")
 
 
-# ── 5. Dataset Collection Progress ────────────────────────────
 def check_dataset_progress():
-   
     print_section("Dataset Collection Progress")
 
     total_rows = 0
@@ -162,7 +206,7 @@ def check_dataset_progress():
         for filepath in glob.glob(f"{LOG_FOLDER}/*.csv"):
             try:
                 with open(filepath, "r") as f:
-                    total_rows += sum(1 for _ in f) - 1  # subtract header row
+                    total_rows += sum(1 for _ in f) - 1
             except Exception:
                 pass
 
@@ -170,14 +214,12 @@ def check_dataset_progress():
     bar_filled   = int(progress_pct / 5)
     bar_empty    = 20 - bar_filled
     bar          = "[" + ("█" * bar_filled) + ("░" * bar_empty) + "]"
-
-    bar_color = GREEN if progress_pct >= 100 else (YELLOW if progress_pct >= 50 else RED)
+    bar_color    = GREEN if progress_pct >= 100 else (YELLOW if progress_pct >= 50 else RED)
 
     print(f"  Total records collected : {color(str(total_rows), BOLD)}")
     print(f"  Target range            : {color(f'{DATASET_MIN:,} – {DATASET_MAX:,}', GRAY)}")
     print(f"  Progress to min target  : {color(f'{bar} {progress_pct}%', bar_color)}")
 
-    # Advice based on progress
     if total_rows == 0:
         print(f"  {color('► Start workload simulation with JMeter to begin collection.', YELLOW)}")
     elif total_rows < DATASET_MIN * 0.3:
@@ -191,13 +233,16 @@ def check_dataset_progress():
 
 
 def export_health_report(instance_stats):
-    
     os.makedirs(REPORT_FOLDER, exist_ok=True)
     timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_file = f"{REPORT_FOLDER}/health_{timestamp}.csv"
 
-    with open(report_file, "w", newline="",encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["port", "status", "response_ms", "checked_at"])
+    # ✅ Added "instance" field to CSV report to capture instance ID
+    with open(report_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["port", "status", "instance", "response_ms", "checked_at"]
+        )
         writer.writeheader()
         writer.writerows(instance_stats)
 
