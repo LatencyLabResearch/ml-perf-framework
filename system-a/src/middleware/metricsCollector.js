@@ -1,53 +1,158 @@
 const pidusage = require('pidusage');
-const config   = require('../server/config');
+const config = require('../server/config');
 
-const recentLatencies = [];
-const recentCpu       = [];
-let   reqCount = 0, errCount = 0;
-let   windowStart = Date.now();
+/* ---------- WINDOW CONFIG ---------- */
 
-module.exports = async (req, res, next) => {
-  req._arrivalTime = process.hrtime.bigint();
-  const stats = await pidusage(process.pid);
-  reqCount++;
+const WINDOW_MS = 5000;
 
-  const elapsed = (Date.now() - windowStart) / 1000;
-  const payloadSize = req.headers['content-length'] ? +(req.headers['content-length'] / 1024).toFixed(2) : 0;
+/* ---------- SLIDING WINDOWS ---------- */
 
-  req._metrics = {
-    timestamp:               new Date().toISOString(),
-    instance_id:             config.instanceId,
-    http_method:             req.method,
-    endpoint_id:             req.route?.path || req.path,
-    endpoint_complexity:     req.headers['x-endpoint-complexity'] || 'unknown',
-    payload_size_kb:         payloadSize,
-    cpu_utilization_pct:     +stats.cpu.toFixed(2),
-    memory_usage_mb:         +(stats.memory / 1048576).toFixed(2),
-    active_connections:      res.socket?.server?._connections || 0,
-    rolling_avg_cpu_5s:
-      recentCpu.length
-        ? +(recentCpu.reduce((a,b)=>a+b,0)/recentCpu.length).toFixed(2)
-        : +stats.cpu.toFixed(2),
-    rolling_avg_latency_10:
-      recentLatencies.length
-        ? +(recentLatencies.reduce((a,b)=>a+b,0)/recentLatencies.length).toFixed(2)
-        : 0,
-    req_per_sec:             +(reqCount / Math.max(elapsed,1)).toFixed(2),
-    short_term_error_rate:   +(errCount / reqCount * 100).toFixed(2)
-  };
+const requestWindow = [];
+const latencyWindow = [];
+const errorWindow = [];
+const cpuWindow = [];
 
-  recentCpu.push(stats.cpu);
-  if (recentCpu.length > 10) recentCpu.shift();
+/* ---------- LATEST SYSTEM SNAPSHOT ---------- */
 
-  res.on('finish', () => {
-    const ms = Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
-    req._metrics.response_time_ms = +ms.toFixed(2);
-    req._metrics.status_code = res.statusCode;
-    
-    recentLatencies.push(ms);
-    if (recentLatencies.length > 10) recentLatencies.shift();
-    if (res.statusCode >= 500) errCount++;
-  });
+let latestCpu = 0;
+let latestMemory = 0;
 
-  next();
+/* ---------- CLEANUP HELPER ---------- */
+
+function pruneOld(arr) {
+
+    const cutoff = Date.now() - WINDOW_MS;
+
+    while (arr.length && arr[0].ts < cutoff) {
+        arr.shift();
+    }
+}
+
+/* ---------- BACKGROUND METRIC SAMPLER ---------- */
+
+setInterval(async () => {
+
+    try {
+
+        const stats = await pidusage(process.pid);
+
+        latestCpu = +stats.cpu.toFixed(2);
+
+        latestMemory =
+            +(stats.memory / 1048576).toFixed(2);
+
+        cpuWindow.push({
+            ts: Date.now(),
+            value: latestCpu
+        });
+
+        pruneOld(cpuWindow);
+
+    } catch (err) {
+
+        console.error('CPU sampler failed:', err);
+    }
+
+}, 1000);
+
+/* ---------- MIDDLEWARE ---------- */
+
+module.exports = (req, res, next) => {
+
+    req._arrivalTime = process.hrtime.bigint();
+
+    /* ---------- TRACK REQUEST ---------- */
+
+    requestWindow.push({
+        ts: Date.now()
+    });
+
+    pruneOld(requestWindow);
+
+    const payloadSize = req.headers['content-length'] ? +(req.headers['content-length'] / 1024).toFixed(2) : 0;
+
+    /* ---------- RESPONSE FINISH ---------- */
+
+    res.on('finish', () => {
+
+        const now = Date.now();
+
+        const latency =
+            Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
+
+        latencyWindow.push({
+            ts: now,
+            value: latency
+        });
+
+        pruneOld(latencyWindow);
+
+        if (res.statusCode >= 500) {
+
+            errorWindow.push({
+                ts: now
+            });
+
+            pruneOld(errorWindow);
+        }
+    });
+
+    /* ---------- COMPUTE WINDOW METRICS ---------- */
+
+    const avgLatency =
+        latencyWindow.length
+            ? latencyWindow.reduce((a, b) => a + b.value, 0)
+                / latencyWindow.length
+            : 0;
+
+    const avgCpu =
+        cpuWindow.length
+            ? cpuWindow.reduce((a, b) => a + b.value, 0)
+                / cpuWindow.length
+            : latestCpu;
+
+    req._metrics = {
+
+        timestamp:               new Date().toISOString(),
+
+        instance_id:             config.instanceId,
+
+        http_method:             req.method,
+
+        endpoint_id:             req.route?.path || req.path,
+
+        endpoint_complexity:     req.headers['x-endpoint-complexity'] || 'unknown',
+
+        payload_size_kb:         payloadSize,
+
+        cpu_utilization_pct:     latestCpu,
+
+        memory_usage_mb:         latestMemory,
+
+        active_connections:      req.socket.server.connections || 0,
+
+        rolling_avg_cpu_5s:      +avgCpu.toFixed(2),
+
+        rolling_avg_latency_5s:  +avgLatency.toFixed(2),
+
+        req_per_sec:             +(requestWindow.length / (WINDOW_MS / 1000)).toFixed(2),
+
+        short_term_error_rate:   requestWindow.length
+                                    ? +(
+                                        (errorWindow.length / requestWindow.length) * 100
+                                    ).toFixed(2)
+                                    : 0,
+
+        response_time_ms:        0,
+
+        status_code:             0
+    };
+
+    res.on('finish', () => {
+        const ms = Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
+        req._metrics.response_time_ms = +ms.toFixed(2);
+        req._metrics.status_code = res.statusCode;
+    });
+
+    next();
 };
