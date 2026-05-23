@@ -29,12 +29,12 @@ time.sleep(6)
 # Run Health Check
 print("\nRunning Health Check...")
 
-subprocess.run(["python", "scripts/health-check.py"])
+subprocess.run(["python", "scripts/health-script.py"])
 
 # Run Smoke Test
 print("\nRunning Smoke Test...")
 
-subprocess.run(["python", "scripts/smoke-test.py"])
+subprocess.run(["python", "scripts/smoke_test.py"])
 
 print("\n🎉 Quick Start Completed Successfully!")
 print("You can now start the full system with just one command:")
