@@ -14,8 +14,12 @@ __pycache__/
 # Logs
 system-a/logging/raw/*.csv
 *.log
-logging/heath_reports
-logging/smoke_tests
+
+
+logging/health_reports
+logging/smoke_reports
+system-a/logging/health_reports
+system-a/logging/smoke_reports
 
 # Optional
 .DS_Store
