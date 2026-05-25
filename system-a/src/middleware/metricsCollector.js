@@ -85,6 +85,21 @@ module.exports = (req, res, next) => {
                 / cpuWindow.length
             : latestCpu;
 
+    let ep = 'unknown';
+
+    if (req.originalUrl.includes('/light')) {
+        ep = 'light';
+    }
+    else if (req.originalUrl.includes('/moderate')) {
+        ep = 'moderate';
+    }
+    else if (req.originalUrl.includes('/heavy')) {
+        ep = 'heavy';
+    }
+    else {
+        ep = '-';
+    }
+
     req._metrics = {
 
         timestamp:               new Date().toISOString(),
@@ -95,7 +110,7 @@ module.exports = (req, res, next) => {
 
         endpoint_id:             req.route?.path || req.path,
 
-        endpoint_complexity:     req.headers['x-endpoint-complexity'] || 'unknown',
+        endpoint_complexity:     ep,
 
         payload_size_kb:         payloadSize,
 
