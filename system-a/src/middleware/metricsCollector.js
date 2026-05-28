@@ -1,4 +1,5 @@
 const pidusage = require('pidusage');
+const crypto = require('crypto');
 const config = require('../server/config');
 
 /* ---------- WINDOW CONFIG ---------- */
@@ -12,12 +13,17 @@ const latencyWindow = [];
 const errorWindow = [];
 const cpuWindow = [];
 
+/* ----------  ACTIVE CONNECTION TRACKING ---------- */
+
+let activeConnections = 0;
+
 /* ---------- LATEST SYSTEM SNAPSHOT ---------- */
 
 let latestCpu = 0;
 let latestMemory = 0;
+let latestEventLoopLag = 0;
 
-/* ---------- CLEANUP HELPER ---------- */
+/* ----------  HELPERS ---------- */
 
 function pruneOld(arr) {
 
@@ -28,15 +34,41 @@ function pruneOld(arr) {
     }
 }
 
+function percentile(values, p) {
+
+    if (!values.length) return 0;
+
+    const sorted = [...values].sort((a, b) => a - b);
+
+    const index =
+        Math.ceil((p / 100) * sorted.length) - 1;
+
+    return sorted[index] || 0;
+}
+
+function normalizeEndpoint(url) {
+
+    return url
+        .replace(/\/\d+/g, '/:id')
+        .replace(
+            /[0-9a-fA-F-]{36}/g,
+            ':uuid'
+        );
+}
+
 /* ---------- BACKGROUND METRIC SAMPLER ---------- */
 
 setInterval(async () => {
 
     try {
 
-        const stats = await pidusage(process.pid);
+        /* ---------- CPU + MEMORY ---------- */
 
-        latestCpu = +stats.cpu.toFixed(2);
+        const stats =
+            await pidusage(process.pid);
+
+        latestCpu =
+            +stats.cpu.toFixed(2);
 
         latestMemory =
             +(stats.memory / 1048576).toFixed(2);
@@ -48,124 +80,264 @@ setInterval(async () => {
 
         pruneOld(cpuWindow);
 
+        /* ---------- EVENT LOOP LAG ---------- */
+
+        const start =
+            process.hrtime.bigint();
+
+        setImmediate(() => {
+
+            latestEventLoopLag =
+                +(
+                    Number(
+                        process.hrtime.bigint() - start
+                    ) / 1e6
+                ).toFixed(2);
+        });
+
     } catch (err) {
 
-        console.error('CPU sampler failed:', err);
+        console.error('Metric sampler failed:', err);
     }
 
 }, 1000);
 
-/* ---------- MIDDLEWARE ---------- */
+/* ---------- ENDPOINT CLASSIFICATION ---------- */
+
+function classifyEndpoint(path) {
+
+    if (!path) return 'unknown';
+
+    if (path.includes('/light')) {
+        return 'light';
+    }
+
+    if (path.includes('/moderate')) {
+        return 'moderate';
+    }
+
+    if (path.includes('/heavy')) {
+        return 'heavy';
+    }
+
+    return 'unknown';
+}
+
+/* ---------- MAIN MIDDLEWARE ---------- */
 
 module.exports = (req, res, next) => {
 
-    req._arrivalTime = process.hrtime.bigint();
+    const requestStart = process.hrtime.bigint();
 
-    /* ---------- TRACK REQUEST ---------- */
+    const now = Date.now();
+
+    /* ---------- ACTIVE CONNECTIONS---------- */
+
+    activeConnections++;
+
+    /* ---------- REQUEST WINDOW---------- */
 
     requestWindow.push({
-        ts: Date.now()
+        ts: now
     });
 
     pruneOld(requestWindow);
 
-    const payloadSize = req.headers['content-length'] ? +(req.headers['content-length'] / 1024).toFixed(2) : 0;
+    /* ---------- REQUEST PAYLOAD ---------- */
 
-    /* ---------- COMPUTE WINDOW METRICS ---------- */
+    const payloadSize =
+        req.headers['content-length']
+            ? +(
+                req.headers['content-length'] / 1024
+            ).toFixed(2)
+            : 0;
+
+    /* ---------- EXPERIMENT METADATA---------- */
+
+    req._experiment = {
+
+        system_type:
+            req.headers['x-system-type'] || 'A',
+
+        traffic_pattern:
+            req.headers['x-traffic-pattern']
+            || 'unknown',
+
+        workload_type:
+            req.headers['x-workload-type']
+            || 'unknown',
+
+        endpoint_group:
+            req.headers['x-endpoint-group']
+            || 'unknown',
+
+        test_tool:
+            req.headers['x-test-tool']
+            || 'unknown',
+
+        experiment_id:
+            req.headers['x-experiment-id']
+            || 'unknown',
+
+        concurrent_users:
+            Number(
+                req.headers[
+                'x-concurrent-users'
+                ]
+            ) || 0
+    };
+
+    /* ---------- WINDOW CALCULATION---------- */
+
+    const latencyValues =
+        latencyWindow.map(l => l.value);
 
     const avgLatency =
-        latencyWindow.length
-            ? latencyWindow.reduce((a, b) => a + b.value, 0)
-                / latencyWindow.length
+        latencyValues.length
+            ? latencyValues.reduce(
+                (a, b) => a + b,
+                0
+            ) / latencyValues.length
             : 0;
 
     const avgCpu =
         cpuWindow.length
-            ? cpuWindow.reduce((a, b) => a + b.value, 0)
-                / cpuWindow.length
+            ? cpuWindow.reduce(
+                (a, b) => a + b.value,
+                0
+            ) / cpuWindow.length
             : latestCpu;
 
-    let ep = 'unknown';
+    const p95Latency =
+        percentile(latencyValues, 95);
 
-    if (req.originalUrl.includes('/light')) {
-        ep = 'light';
-    }
-    else if (req.originalUrl.includes('/moderate')) {
-        ep = 'moderate';
-    }
-    else if (req.originalUrl.includes('/heavy')) {
-        ep = 'heavy';
-    }
-    else {
-        ep = '-';
-    }
+    const p99Latency =
+        percentile(latencyValues, 99);
+
+    /* ---------- ENDPOINT INFO---------- */
+
+    const endpointId =
+        normalizeEndpoint(
+            req.route?.path || req.path
+        );
+
+    const endpointComplexity =
+        classifyEndpoint(endpointId);
+
+    /* ---------- REQUEST METRICS OBJECT---------- */
 
     req._metrics = {
 
-        timestamp:               new Date().toISOString(),
+        request_id:
+            crypto.randomUUID(),
 
-        instance_id:             config.instanceId,
+        timestamp:
+            new Date().toISOString(),
 
-        http_method:             req.method,
+        instance_id:
+            config.instanceId,
 
-        endpoint_id:             req.route?.path || req.path,
+        http_method:
+            req.method,
 
-        endpoint_complexity:     ep,
+        endpoint_id:
+            endpointId,
 
-        payload_size_kb:         payloadSize,
+        endpoint_complexity:
+            endpointComplexity,
 
-        cpu_utilization_pct:     latestCpu,
+        payload_size_kb:
+            payloadSize,
 
-        memory_usage_mb:         latestMemory,
+        cpu_utilization_pct:
+            latestCpu,
 
-        active_connections:      req.socket.server.connections || 0,
+        memory_usage_mb:
+            latestMemory,
 
-        rolling_avg_cpu_5s:      +avgCpu.toFixed(2),
+        active_connections:
+            activeConnections,
 
-        rolling_avg_latency_5s:  +avgLatency.toFixed(2),
+        event_loop_lag_ms:
+            latestEventLoopLag,
 
-        req_per_sec:             +(requestWindow.length / (WINDOW_MS / 1000)).toFixed(2),
+        rolling_avg_cpu_5s:
+            +avgCpu.toFixed(2),
 
-        short_term_error_rate:   requestWindow.length
-                                    ? +(
-                                        (errorWindow.length / requestWindow.length) * 100
-                                    ).toFixed(2)
-                                    : 0,
+        rolling_avg_latency_5s:
+            +avgLatency.toFixed(2),
 
-        response_time_ms:        0,
+        p95_latency_5s:
+            +p95Latency.toFixed(2),
 
-        status_code:             0
+        p99_latency_5s:
+            +p99Latency.toFixed(2),
+
+        req_per_sec:
+            +(
+                requestWindow.length /
+                (WINDOW_MS / 1000)
+            ).toFixed(2),
+
+        short_term_error_rate:
+            requestWindow.length
+                ? +(
+                    (
+                        errorWindow.length /
+                        requestWindow.length
+                    ) * 100
+                ).toFixed(2)
+                : 0,
+
+        response_time_ms: 0,
+
+        status_code: 0
     };
 
     /* ---------- RESPONSE FINISH ---------- */
 
     res.on('finish', () => {
 
-        const now = Date.now();
+        try {
 
-        const latency =
-            Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
+            const finishTime =
+                Date.now();
 
-        latencyWindow.push({
-            ts: now,
-            value: latency
-        });
+            const latency =
+                Number(
+                    process.hrtime.bigint()
+                    - requestStart
+                ) / 1e6;
 
-        pruneOld(latencyWindow);
+            /* ---------- LATENCY WINDOW ---------- */
+
+            latencyWindow.push({
+                ts: finishTime,
+                value: latency
+            });
+
+            pruneOld(latencyWindow);
+
+            /* ---------- ERROR WINDOW ---------- */
 
         if (res.statusCode >= 500) {
 
             errorWindow.push({
-                ts: now
+                ts: finishTime
             });
 
             pruneOld(errorWindow);
         }
 
-        /* ---------- UPDATE RESPONSE METRICS ---------- */
+            /* ---------- FINAL METRICS ---------- */
 
         req._metrics.response_time_ms = +latency.toFixed(2);
         req._metrics.status_code = res.statusCode;
+
+        } finally {
+
+            activeConnections--;
+        }
     });
 
     next();
