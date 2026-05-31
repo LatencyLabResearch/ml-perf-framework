@@ -7,6 +7,7 @@ print("============================================\n")
 
 base_path = os.getcwd()
 
+# For Nginx run can comment this section
 # -----------------------------------
 # Start Load Balancer
 # -----------------------------------
