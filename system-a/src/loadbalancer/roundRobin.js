@@ -1,20 +1,20 @@
-const config = require('../server/config');
+// const config = require('../server/config');
 
-const instances = config.instances;
+// const instances = config.instances;
 
-let index = 0;
+// let index = 0;
 
-function next() {
+// function next() {
 
-    if (!instances.length) {
-        throw new Error('No instances available');
-    }
+//     if (!instances.length) {
+//         throw new Error('No instances available');
+//     }
 
-    const instance = instances[index];
+//     const instance = instances[index];
 
-    index = (index + 1) % instances.length;
+//     index = (index + 1) % instances.length;
 
-    return instance;
-}
+//     return instance;
+// }
 
-module.exports = { next };
+// module.exports = { next };

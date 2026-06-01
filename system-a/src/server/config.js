@@ -1,11 +1,11 @@
 require('dotenv').config();
 
 module.exports = {
-    instances: [
-        { id: 'instance-1', url: 'http://localhost:3001' },
-        { id: 'instance-2', url: 'http://localhost:3002' },
-        { id: 'instance-3', url: 'http://localhost:3003' }
-    ],
+    // instances: [
+    //     { id: 'instance-1', url: 'http://localhost:3001' },
+    //     { id: 'instance-2', url: 'http://localhost:3002' },
+    //     { id: 'instance-3', url: 'http://localhost:3003' }
+    // ],
 
     lbPort: parseInt(process.env.LB_PORT) || 3000,
     port: parseInt(process.env.PORT) || 3001,

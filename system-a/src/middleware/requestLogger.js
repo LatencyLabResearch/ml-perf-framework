@@ -4,43 +4,6 @@ const path = require('path');
 const { csvLogger, debugLogger } = require('../config/logger');
 
 /* =========================================================
-   CSV FILE PATH
-========================================================= */
-
-const CSV_FILE =
-    path.join(__dirname, '../logs/requests.csv');
-
-/* =========================================================
-   CSV HEADER
-========================================================= */
-
-const CSV_HEADER =
-    'request_id,timestamp,instance_id,' +
-    'system_type,traffic_pattern,workload_type,' +
-    'endpoint_group,test_tool,experiment_id,concurrent_users,' +
-    'http_method,endpoint_id,endpoint_complexity,payload_size_kb,' +
-    'cpu_utilization_pct,memory_usage_mb,active_connections,event_loop_lag_ms,' +
-    'rolling_avg_cpu_5s,rolling_avg_latency_5s,p95_latency_5s,p99_latency_5s,' +
-    'req_per_sec,short_term_error_rate,response_time_ms,status_code';
-
-/* =========================================================
-   ENSURE CSV HEADER EXISTS
-========================================================= */
-
-if (!fs.existsSync(CSV_FILE)) {
-
-    fs.mkdirSync(
-        path.dirname(CSV_FILE),
-        { recursive: true }
-    );
-
-    fs.writeFileSync(
-        CSV_FILE,
-        CSV_HEADER + '\n'
-    );
-}
-
-/* =========================================================
    CSV SAFETY HELPERS
 ========================================================= */
 
