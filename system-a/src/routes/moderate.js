@@ -13,22 +13,44 @@ const { createRequest, getRequestCount } = require('../services/request.service'
 //     res.json({ type: 'moderate', ...result });
 // });
 
-router.post('/', (req, res) => {
-  try {
-    const payload = JSON.stringify(req.body || {});
+// router.post('/', (req, res) => {
+//   try {
+//     const payload = JSON.stringify(req.body || {});
 
-    createRequest(payload);
+//     createRequest(payload);
 
-    const result = getRequestCount();
+//     const result = getRequestCount();
 
-    res.json({ type: 'moderate', count: result.cnt, });
-  } catch (error) {
-    console.error(error);
+//     res.json({ type: 'moderate', count: result.cnt, });
+//   } catch (error) {
+//     console.error(error);
     
-    res.status(500).json({
-      error: 'Database error',
-    });
-  }
+//     res.status(500).json({
+//       error: 'Database error',
+//     });
+//   }
+// });
+
+router.post('/', (req, res) => {
+
+    // Reject non-object bodies early before hitting the DB
+    if (req.body !== undefined && typeof req.body !== 'object') {
+        return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+
+    try {
+        const payload = JSON.stringify(req.body || {});
+
+        createRequest(payload);
+
+        const result = getRequestCount();
+
+        res.json({ type: 'moderate', count: result.cnt });
+
+    } catch (err) {
+        console.error('[moderate] DB error:', err.message);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 module.exports = router;
