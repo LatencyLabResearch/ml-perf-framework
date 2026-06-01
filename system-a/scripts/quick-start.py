@@ -9,11 +9,19 @@ print("============================================\n")
 print("Stopping any running instances...")
 
 try:
-    subprocess.run(
-        ["taskkill", "/F", "/IM", "node.exe"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+    # subprocess.run(
+    #     ["taskkill", "/F", "/IM", "node.exe"],
+    #     stdout=subprocess.DEVNULL,
+    #     stderr=subprocess.DEVNULL
+    # )
+    subprocess.run(["nginx", "-s", "stop"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except:
+    pass
+
+try:
+    subprocess.run(["taskkill", "/F", "/IM", "node.exe"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 except:
     pass
 

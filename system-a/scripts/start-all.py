@@ -9,20 +9,25 @@ base_path = os.getcwd()
 
 # -----------------------------------
 # Start Load Balancer
+
+# print("Starting Load Balancer (3000)...")
+# lb_env = os.environ.copy()
+# lb_env["LB_PORT"] = "3000"
+
+
+
+# Start Nginx Load Balancer
 # -----------------------------------
-
-print("Starting Load Balancer (3000)...")
-
-lb_env = os.environ.copy()
-lb_env["LB_PORT"] = "3000"
+print("Starting Nginx Load Balancer (3000)...")
+nginx_exe = r"C:\tools\nginx-1.31.1\nginx.exe"
+nginx_conf = os.path.join(base_path, "nginx", "nginx.conf")
 
 subprocess.Popen(
-    ["cmd", "/k", "node src/loadbalancer/lb.js"],
-    cwd=base_path,
-    env=lb_env
+    [nginx_exe, "-c", nginx_conf],
+    cwd=r"C:\tools\nginx-1.31.1"
 )
 
-time.sleep(3)
+time.sleep(2)
 
 # -----------------------------------
 # Start Backend Instances
@@ -43,10 +48,10 @@ def start_instance(instance_id, port):
     )
 
 start_instance(1, 3001)
-time.sleep(3)
+time.sleep(2)
 
 start_instance(2, 3002)
-time.sleep(3)
+time.sleep(2)
 
 start_instance(3, 3003)
 
