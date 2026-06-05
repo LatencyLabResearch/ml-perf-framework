@@ -35,12 +35,12 @@ fs.mkdirSync(config.logDir, { recursive: true });
 
 const csvFile = path.join(
     config.logDir,
-    `instance-${config.instanceId}.csv`
+    `request.csv`
 );
 
 const debugFile = path.join(
     config.logDir,
-    `instance-${config.instanceId}.log`
+    `request.log`
 );
 
 /* ---------------- CSV LOGGER ---------------- */
@@ -76,17 +76,32 @@ const debugLogger = winston.createLogger({
 
 if (!fs.existsSync(csvFile)) {
     csvLogger.info([
+        'request_id',
         'timestamp',
         'instance_id',
+        'system_type',
+        'traffic_pattern',
+        'workload_type',
+        'endpoint_group',
+        'test_tool',
+        'experiment_id',
+        'concurrent_users',
+
         'http_method',
         'endpoint_id',
         'endpoint_complexity',
         'payload_size_kb',
+
         'cpu_utilization_pct',
         'memory_usage_mb',
         'active_connections',
+        'event_loop_lag_ms',
+
         'rolling_avg_cpu_5s',
-        'rolling_avg_latency_10',
+        'rolling_avg_latency_5s',
+        'p95_latency_5s',
+        'p99_latency_5s',
+
         'req_per_sec',
         'short_term_error_rate',
         'response_time_ms',

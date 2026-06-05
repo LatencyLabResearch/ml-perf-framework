@@ -9,11 +9,19 @@ print("============================================\n")
 print("Stopping any running instances...")
 
 try:
-    subprocess.run(
-        ["taskkill", "/F", "/IM", "node.exe"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+    # subprocess.run(
+    #     ["taskkill", "/F", "/IM", "node.exe"],
+    #     stdout=subprocess.DEVNULL,
+    #     stderr=subprocess.DEVNULL
+    # )
+    subprocess.run(["nginx", "-s", "stop"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except:
+    pass
+
+try:
+    subprocess.run(["taskkill", "/F", "/IM", "node.exe"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 except:
     pass
 
@@ -29,12 +37,12 @@ time.sleep(6)
 # Run Health Check
 print("\nRunning Health Check...")
 
-subprocess.run(["python", "scripts/health-check.py"])
+subprocess.run(["python", "scripts/health-script.py"])
 
 # Run Smoke Test
 print("\nRunning Smoke Test...")
 
-subprocess.run(["python", "scripts/smoke-test.py"])
+subprocess.run(["python", "scripts/smoke_test.py"])
 
 print("\n🎉 Quick Start Completed Successfully!")
 print("You can now start the full system with just one command:")

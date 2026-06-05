@@ -1,24 +1,94 @@
-// const logger = require('../server/config/logger');
-
-// const requestLogger = (req,res,next) => {
-//     res.on("finish",() => {
-//         const message = `${req.method} ${req.url} ${res.statusCode}`;
-//         logger.info(message);
-//     });
-// next();
-// };
-
-// module.exports = requestLogger;
-
-
-
-
+const fs = require('fs');
+const path = require('path');
 
 const { csvLogger, debugLogger } = require('../config/logger');
 
-const config = require('../server/config');
+/* =========================================================
+   CSV SAFETY HELPERS
+========================================================= */
 
-const EP_MAP = { light: 0, moderate: 1, heavy: 2 };
+function escapeCSV(value) {
+
+    if (value === null || value === undefined) {
+        return '';
+    }
+
+    const str = String(value);
+
+    if (
+        str.includes(',') ||
+        str.includes('"') ||
+        str.includes('\n')
+    ) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+
+    return str;
+}
+
+/* =========================================================
+   STRICT COLUMN ORDER (DO NOT CHANGE)
+========================================================= */
+
+function buildRow(m, e) {
+
+    return [
+
+        /* ---------- CORE IDENTITY ---------- */
+
+        m.request_id,
+        m.timestamp,
+        m.instance_id,
+
+        /* ---------- EXPERIMENT METADATA ---------- */
+
+        e.system_type,
+        e.traffic_pattern,
+        e.workload_type,
+        e.endpoint_group,
+        e.test_tool,
+        e.experiment_id,
+        e.concurrent_users,
+
+        /* ---------- REQUEST INFO ---------- */
+
+        m.http_method,
+        m.endpoint_id,
+        m.endpoint_complexity,
+        m.payload_size_kb,
+
+        /* ---------- SYSTEM METRICS ---------- */
+
+        m.cpu_utilization_pct,
+        m.memory_usage_mb,
+        m.active_connections,
+        m.event_loop_lag_ms,
+
+        /* ---------- ROLLING METRICS ---------- */
+
+        m.rolling_avg_cpu_5s,
+        m.rolling_avg_latency_5s,
+        m.p95_latency_5s,
+        m.p99_latency_5s,
+
+        /* ---------- THROUGHPUT ---------- */
+
+        m.req_per_sec,
+
+        /* ---------- ERRORS ---------- */
+
+        m.short_term_error_rate,
+
+        /* ---------- RESPONSE ---------- */
+
+        m.response_time_ms,
+        m.status_code
+    ];
+}
+
+/* =========================================================
+   MAIN LOGGER
+========================================================= */
 
 const requestLogger = (req, res, next) => {
 
@@ -26,50 +96,49 @@ const requestLogger = (req, res, next) => {
 
         try {
 
-            const ms = Number(process.hrtime.bigint() - req._arrivalTime) / 1e6;
-
-            const ep = req.path.split('/').pop();
-
             const m = req._metrics || {};
+            const e = req._experiment || {};
 
-            const kb = +((req.headers['content-length'] || 0) / 1024).toFixed(3);
+            /* =====================================================
+               CSV OUTPUT (ML DATASET)
+            ===================================================== */
 
-            /* ---------- CSV DATASET LOG ---------- */
+            const row = buildRow(m, e)
+                .map(escapeCSV)
+                .join(',');
 
-            csvLogger.info([
-                Date.now(),
-                m.instance_id ?? config.instanceId,
-                req.method === 'POST' ? 1 : 0,
-                EP_MAP[ep] ?? 0,
-                config.complexity[ep] ?? 1,
-                kb,
-                m.cpu_utilization_pct ?? 0,
-                m.memory_usage_mb ?? 0,
-                m.active_connections ?? 0,
-                m.rolling_avg_cpu_5s ?? 0,
-                m.rolling_avg_latency_10 ?? 0,
-                m.req_per_sec ?? 0,
-                m.short_term_error_rate ?? 0,
-                +ms.toFixed(3),
-                res.statusCode
-            ].join(','));
+            csvLogger.info(row);
 
-            /* ---------- HUMAN DEBUG LOG ---------- */
+            /* =====================================================
+               HUMAN DEBUG LOG
+            ===================================================== */
 
             debugLogger.info(
-                `[Instance ${m.instance_id}] ` +
-                `${req.method} ${req.originalUrl} | ` +
-                `Status=${res.statusCode} | ` +
-                `Latency=${ms.toFixed(2)}ms | ` +
-                `CPU=${m.cpu_utilization_pct}% | ` +
-                `MEM=${m.memory_usage_mb}MB | ` +
-                `Conn=${m.active_connections}`
+
+                `[${e.experiment_id || 'EXP-NA'}] ` +
+                `[System:${e.system_type || 'A'}] ` +
+                `${m.http_method || req.method} ` +
+                `${m.endpoint_id || req.originalUrl} | ` +
+
+                `Status=${m.status_code || res.statusCode} | ` +
+                `Latency=${m.response_time_ms || 0}ms | ` +
+                `CPU=${m.cpu_utilization_pct || 0}% | ` +
+                `MEM=${m.memory_usage_mb || 0}MB | ` +
+                `Conn=${m.active_connections || 0} | ` +
+                `Users=${e.concurrent_users || 0} | ` +
+                `Pattern=${e.traffic_pattern || 'unknown'} | ` +
+                `Tool=${e.test_tool || 'unknown'}`
             );
 
         } catch (err) {
-            console.error('Request logging failed:', err);
+
+            console.error(
+                'Request logging failed:',
+                err
+            );
         }
     });
+
     next();
 };
 
