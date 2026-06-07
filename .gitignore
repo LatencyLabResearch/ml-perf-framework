@@ -14,6 +14,8 @@ __pycache__/
 # Logs
 system-a/logging/raw/*.csv
 *.log
+logging/heath_reports
+logging/smoke_tests
 
 
 logging/health_reports
