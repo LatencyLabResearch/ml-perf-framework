@@ -16,7 +16,8 @@ system-a/logging/raw/*.csv
 *.log
 logging/heath_reports
 logging/smoke_tests
-
+system-a/logging/raw/sweeskaran/k6-results/
+logging/raw/*results.csv
 
 logging/health_reports
 logging/smoke_reports
@@ -30,3 +31,14 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+
+# Ignore the specific workload database files
+system-a/data/workload.db
+system-a/data/workload.db-wal
+system-a/data/workload.db-shm

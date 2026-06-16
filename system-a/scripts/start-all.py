@@ -19,12 +19,12 @@ base_path = os.getcwd()
 # Start Nginx Load Balancer
 # -----------------------------------
 print("Starting Nginx Load Balancer (3000)...")
-nginx_exe = r"C:\tools\nginx-1.31.1\nginx.exe"
+nginx_exe = r"G:\Acer-LapContent\nginx-1.30.2\nginx-1.30.2\nginx.exe"
 nginx_conf = os.path.join(base_path, "nginx", "nginx.conf")
 
 subprocess.Popen(
     [nginx_exe, "-c", nginx_conf],
-    cwd=r"C:\tools\nginx-1.31.1"
+    cwd=r"G:\Acer-LapContent\nginx-1.30.2\nginx-1.30.2"
 )
 
 time.sleep(2)
